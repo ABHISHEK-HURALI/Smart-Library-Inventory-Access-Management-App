@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container min-vh-100 d-flex align-items-center justify-content-center">
+    <div class="card shadow-lg" style="width: 450px; border-radius: 20px;">
+        <div class="card-body p-5">
+            <div class="text-center mb-4">
+                <i class="fas fa-user-plus fa-3x" style="color: #1A365D;"></i>
+                <h2 class="mt-3" style="color: #1A365D;">Student Signup</h2>
+            </div>
+            <form id="signupForm">
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input type="text" id="username" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input type="email" id="email" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Enrollment ID</label>
+                    <input type="text" id="enrollment_id" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Department</label>
+                    <select id="department" class="form-control" required>
+                        <option value="">Select Department</option>
+                        <option value="CSE">Computer Science (CSE)</option>
+                        <option value="ECE">Electronics (ECE)</option>
+                        <option value="EEE">Electrical (EEE)</option>
+                        <option value="MECH">Mechanical (MECH)</option>
+                        <option value="CIVIL">Civil (CIVIL)</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Password</label>
+                    <input type="password" id="password" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100" style="background: #1A365D;">Signup</button>
+            </form>
+            <p class="text-center mt-3">Already have account? <a href="/api/student/login/page/">Login</a></p>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('signupForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const response = await fetch('/api/student/register/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            username: document.getElementById('username').value,
+            email: document.getElementById('email').value,
+            enrollment_id: document.getElementById('enrollment_id').value,
+            department: document.getElementById('department').value,
+            password: document.getElementById('password').value
+        })
+    });
+    const data = await response.json();
+    if (response.ok) {
+        alert('Registration successful! Please login.');
+        window.location.href = '/api/student/login/page/';
+    } else {
+        alert(data.error);
+    }
+};
+</script>
+{% endblock %}

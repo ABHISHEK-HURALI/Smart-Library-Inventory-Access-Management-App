@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .prediction-badge { background-color: #17a2b8; color: white; padding: 5px 10px; border-radius: 15px; font-size: 12px; }
+    .nav-tabs .nav-link { color: #1A365D; }
+    .nav-tabs .nav-link.active { background-color: #1A365D; color: white; }
+</style>
+
+<nav class="navbar navbar-dark" style="background: #1A365D;">
+    <div class="container">
+        <span class="navbar-brand"><i class="fas fa-book"></i> LibSmart - Student Dashboard</span>
+        <div>
+            <span class="text-white me-3">Welcome, {{ request.user.username }}</span>
+            <button class="btn btn-danger btn-sm" onclick="logout()">Logout</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
+        <li class="nav-item"><button class="nav-link active" id="books-tab" data-bs-toggle="tab" data-bs-target="#books" type="button">📚 Browse Books</button></li>
+        <li class="nav-item"><button class="nav-link" id="mybooks-tab" data-bs-toggle="tab" data-bs-target="#mybooks" type="button">📖 My Books</button></li>
+        <li class="nav-item"><button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#history" type="button">📜 Reading History</button></li>
+        <li class="nav-item"><button class="nav-link" id="reservations-tab" data-bs-toggle="tab" data-bs-target="#reservations" type="button">⏳ Reservations</button></li>
+        <li class="nav-item"><button class="nav-link" id="qr-tab" data-bs-toggle="tab" data-bs-target="#qr" type="button">📷 QR Scan</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Browse Books Tab -->
+        <div class="tab-pane fade show active" id="books">
+            <div class="card shadow">
+                <div class="card-header" style="background: #D4AF37; color: #1A365D;">
+                    <h5><i class="fas fa-search"></i> Search & Filter Books</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-4"><input type="text" id="searchInput" class="form-control" placeholder="Search..." onkeyup="filterBooks()"></div>
+                        <div class="col-md-3"><select id="categoryFilter" class="form-select" onchange="filterBooks()"><option value="">All Categories</option></select></div>
+                        <div class="col-md-3"><select id="authorFilter" class="form-select" onchange="filterBooks()"><option value="">All Authors</option></select></div>
+                        <div class="col-md-2"><select id="yearFilter" class="form-select" onchange="filterBooks()"><option value="">All Years</option></select></div>
+                    </div>
+                    <div id="bookResults" class="row">Loading books...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- My Books Tab -->
+        <div class="tab-pane fade" id="mybooks">
+            <div class="card shadow">
+                <div class="card-header" style="background: #D4AF37; color: #1A365D;"><h5>My Borrowed Books</h5></div>
+                <div class="card-body" id="myLoansList">Loading...</div>
+            </div>
+            <div class="card shadow mt-3">
+                <div class="card-header bg-danger text-white"><h5>My Fines</h5></div>
+                <div class="card-body"><h3>₹ <span id="totalFine">0</span></h3></div>
+            </div>
+        </div>
+
+        <!-- Reading History Tab -->
+        <div class="tab-pane fade" id="history">
+            <div class="card shadow">
+                <div class="card-header" style="background: #D4AF37; color: #1A365D;"><h5>Reading History</h5></div>
+                <div class="card-body" id="readingHistoryList">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Reservations Tab -->
+        <div class="tab-pane fade" id="reservations">
+            <div class="card shadow">
+                <div class="card-header" style="background: #D4AF37; color: #1A365D;"><h5>My Reservations</h5></div>
+                <div class="card-body" id="reservationsList">Loading...</div>
+            </div>
+        </div>
+
+        <!-- QR Scan Tab -->
+        <div class="tab-pane fade" id="qr">
+            <div class="card shadow text-center">
+                <div class="card-header" style="background: #D4AF37; color: #1A365D;"><h5>Scan QR Code to Borrow/Return</h5></div>
+                <div class="card-body">
+                    <div id="qr-reader" style="width: 300px; margin: 0 auto;"></div>
+                    <button class="btn btn-primary mt-3" onclick="startQRScanner()">Start Camera</button>
+                    <button class="btn btn-danger mt-3" onclick="stopQRScanner()">Stop Camera</button>
+                    <p class="mt-3" id="qr-result"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
+<script>
+let allBooks = [];
+let html5QrCode;
+
+async function loadCategories() {
+    const resp = await fetch('/api/books/categories/');
+    const data = await resp.json();
+    const select = document.getElementById('categoryFilter');
+    data.categories.forEach(c => { let opt = document.createElement('option'); opt.value = c.code; opt.textContent = c.name; select.appendChild(opt); });
+}
+async function loadAuthors() {
+    const resp = await fetch('/api/books/authors/');
+    const data = await resp.json();
+    const select = document.getElementById('authorFilter');
+    data.authors.forEach(a => { let opt = document.createElement('option'); opt.value = a; opt.textContent = a; select.appendChild(opt); });
+}
+async function loadYears() {
+    const resp = await fetch('/api/books/years/');
+    const data = await resp.json();
+    const select = document.getElementById('yearFilter');
+    data.years.forEach(y => { let opt = document.createElement('option'); opt.value = y; opt.textContent = y; select.appendChild(opt); });
+}
+
+async function loadBooks() {
+    let url = '/api/books/?';
+    const search = document.getElementById('searchInput').value;
+    const category = document.getElementById('categoryFilter').value;
+    const author = document.getElementById('authorFilter').value;
+    const year = document.getElementById('yearFilter').value;
+    if (search) url += `search=${search}&`;
+    if (category) url += `category=${category}&`;
+    if (author) url += `author=${author}&`;
+    if (year) url += `year=${year}&`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    allBooks = data.books;
+    const container = document.getElementById('bookResults');
+    if (!allBooks.length) { container.innerHTML = '<p>No books</p>'; return; }
+    container.innerHTML = allBooks.map(book => `
+        <div class="col-md-4 mb-3"><div class="card h-100"><div class="card-body">
+            <h6>${book.title}</h6><p class="text-muted small">${book.author}</p>
+            <span class="badge ${book.available_copies > 0 ? 'bg-success' : 'bg-danger'}">${book.available_copies}/${book.total_copies}</span>
+            ${book.prediction ? `<div class="prediction-badge mt-2">🔮 ${book.prediction}</div>` : ''}
+            <div>⭐ ${book.average_rating ? book.average_rating.toFixed(1) : '0'}/5 (${book.total_ratings})</div>
+            ${book.available_copies > 0 ? `<button class="btn btn-sm btn-primary mt-2 w-100" onclick="borrowBook(${book.id})">Borrow</button>` : `<button class="btn btn-sm btn-warning mt-2 w-100" onclick="reserveBook(${book.id})">Reserve</button>`}
+            <button class="btn btn-sm btn-outline-info mt-1 w-100" data-bs-toggle="modal" data-bs-target="#ratingModal" onclick="openRatingModal(${book.id}, '${book.title}')">Rate & Review</button>
+        </div></div></div>
+    `).join('');
+}
+function filterBooks() { loadBooks(); }
+
+async function borrowBook(bookId) {
+    const resp = await fetch('/api/borrow/', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({book_id: bookId}) });
+    const data = await resp.json();
+    if (resp.ok) { alert(`✅ Borrowed! Due: ${new Date(data.due_date).toLocaleDateString()}`); loadBooks(); loadMyLoans(); loadReadingHistory(); }
+    else alert('❌ ' + data.error);
+}
+async function returnBook(loanId) {
+    const resp = await fetch('/api/return/', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({loan_id: loanId}) });
+    const data = await resp.json();
+    if (resp.ok) { alert(`✅ Returned! Fine: ₹${data.fine}`); loadBooks(); loadMyLoans(); loadReadingHistory(); }
+    else alert('❌ ' + data.error);
+}
+async function reserveBook(bookId) {
+    const resp = await fetch('/api/reserve-book/', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({book_id: bookId}) });
+    const data = await resp.json();
+    if (resp.ok) { alert(data.message); loadMyReservations(); }
+    else alert('❌ ' + data.error);
+}
+async function loadMyLoans() {
+    const resp = await fetch('/api/my-loans/');
+    const data = await resp.json();
+    const container = document.getElementById('myLoansList');
+    if (data.loans && data.loans.length) {
+        container.innerHTML = `<table class="table table-bordered"><tr><th>Book</th><th>Issue</th><th>Due</th><th>Fine</th><th></th></tr>${data.loans.map(l => `<tr><td>${l.book_title}</td><td>${new Date(l.issue_date).toLocaleDateString()}</td><td>${new Date(l.due_date).toLocaleDateString()}</td><td>₹${l.fine}</td><td><button class="btn btn-sm btn-warning" onclick="returnBook(${l.id})">Return</button></td></tr>`).join('')}</table>`;
+    } else container.innerHTML = '<p>No books borrowed</p>';
+}
+async function loadMyFines() {
+    const resp = await fetch('/api/my-fines/');
+    const data = await resp.json();
+    document.getElementById('totalFine').innerText = data.total_fine || 0;
+}
+
+async function loadReadingHistory() {
+    const resp = await fetch('/api/my-reading-history/');
+    const data = await resp.json();
+    const container = document.getElementById('readingHistoryList');
+    if (data.history && data.history.length) {
+        container.innerHTML = `<table class="table"><tr><th>Book</th><th>Borrowed</th><th>Returned</th></tr>${data.history.map(h => `<tr><td>${h.book_title}</td><td>${new Date(h.borrowed_at).toLocaleDateString()}</td><td>${h.returned_at ? new Date(h.returned_at).toLocaleDateString() : 'Not returned'}</td></tr>`).join('')}</table>`;
+    } else container.innerHTML = '<p>No history</p>';
+}
+async function loadMyReservations() {
+    const resp = await fetch('/api/my-reservations/');
+    const data = await resp.json();
+    const container = document.getElementById('reservationsList');
+    if (data.reservations && data.reservations.length) {
+        container.innerHTML = `<table class="table"><tr><th>Book</th><th>Reserved</th><th>Queue</th></tr>${data.reservations.map(r => `<tr><td>${r.book_title}</td><td>${new Date(r.reservation_date).toLocaleDateString()}</td><td>${r.queue_position}</td></tr>`).join('')}</table>`;
+    } else container.innerHTML = '<p>No reservations</p>';
+}
+let currentBookId = null;
+function openRatingModal(bookId, title) { currentBookId = bookId; document.getElementById('modalBookTitle').innerText = title; }
+async function submitRating() {
+    const rating = document.getElementById('ratingValue').value;
+    const review = document.getElementById('reviewText').value;
+    const resp = await fetch('/api/rate-book/', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({book_id: currentBookId, rating: parseInt(rating), review: review}) });
+    const data = await resp.json();
+    if (resp.ok) { alert('Rating submitted!'); bootstrap.Modal.getInstance(document.getElementById('ratingModal')).hide(); loadBooks(); }
+    else alert('❌ ' + data.error);
+}
+function startQRScanner() {
+    if (html5QrCode) html5QrCode.stop();
+    html5QrCode = new Html5Qrcode("qr-reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, 
+        (decodedText) => { document.getElementById('qr-result').innerHTML = `Scanned: ${decodedText}<br><button class="btn btn-sm btn-success mt-2" onclick="qrBorrow('${decodedText}')">Borrow</button>`; },
+        (error) => { console.log(error); });
+}
+function stopQRScanner() { if (html5QrCode) { html5QrCode.stop(); html5QrCode = null; } }
+async function qrBorrow(qrCode) {
+    const resp = await fetch('/api/borrow/', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({qr_code: qrCode}) });
+    const data = await resp.json();
+    if (resp.ok) alert(`✅ Borrowed via QR! Due: ${new Date(data.due_date).toLocaleDateString()}`);
+    else alert('❌ ' + data.error);
+    loadBooks(); loadMyLoans();
+}
+function logout() { fetch('/api/logout/').then(() => { window.location.href = '/api/student/login/page/'; }); }
+
+loadCategories(); loadAuthors(); loadYears(); loadBooks(); loadMyLoans(); loadMyFines(); loadReadingHistory(); loadMyReservations();
+setInterval(() => { loadBooks(); loadMyLoans(); }, 30000);
+</script>
+
+<div class="modal fade" id="ratingModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header bg-warning"><h5>Rate & Review: <span id="modalBookTitle"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <label>Rating:</label><select id="ratingValue" class="form-select"><option value="1">1 - Poor</option><option value="2">2 - Fair</option><option value="3">3 - Good</option><option value="4">4 - Very Good</option><option value="5" selected>5 - Excellent</option></select>
+            <label class="mt-2">Review:</label><textarea id="reviewText" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-primary" onclick="submitRating()">Submit</button></div>
+    </div></div>
+</div>
+{% endblock %}

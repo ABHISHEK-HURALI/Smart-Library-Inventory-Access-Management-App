@@ -1,0 +1,297 @@
+{% extends 'base.html' %}
+{% block content %}
+<style>
+    .stat-card {
+        border-radius: 20px;
+        transition: all 0.2s ease;
+        border: none;
+        overflow: hidden;
+    }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.1); }
+    .stat-icon { position: absolute; right: 20px; bottom: 15px; opacity: 0.15; font-size: 3rem; }
+    .bg-primary-gradient { background: linear-gradient(135deg, #1A365D, #2c5282); }
+    .bg-success-gradient { background: linear-gradient(135deg, #276749, #38a169); }
+    .bg-warning-gradient { background: linear-gradient(135deg, #c05621, #ed8936); }
+    .bg-danger-gradient { background: linear-gradient(135deg, #9b2c2c, #e53e3e); }
+    .bg-info-gradient { background: linear-gradient(135deg, #2b6cb0, #4299e1); }
+    .bg-purple-gradient { background: linear-gradient(135deg, #6b46c0, #9f7aea); }
+    .table-scroll { max-height: 350px; overflow-y: auto; display: block; }
+    .table-scroll thead tr { position: sticky; top: 0; background: #f8fafc; z-index: 10; }
+    .activity-item {
+        border-left: 4px solid #D4AF37;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        background: #f9fafb;
+        border-radius: 12px;
+        transition: 0.1s;
+    }
+    .activity-item:hover { background: #f1f5f9; }
+    .badge-issued { background: #3182ce; color: white; }
+    .badge-returned { background: #38a169; color: white; }
+    .quick-action-btn { border-radius: 40px; padding: 8px 20px; font-size: 14px; }
+    .section-title { font-size: 1.2rem; font-weight: 600; margin-bottom: 1rem; border-left: 5px solid #D4AF37; padding-left: 15px; }
+</style>
+
+<nav class="navbar navbar-dark shadow-sm" style="background: #1A365D;">
+    <div class="container-fluid px-4">
+        <span class="navbar-brand"><i class="fas fa-chalkboard-teacher me-2"></i>LibSmart Admin Portal</span>
+        <div>
+            <span class="text-white me-3"><i class="fas fa-user-circle"></i> {{ request.user.username }}</span>
+            <button class="btn btn-outline-light btn-sm" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4 py-4">
+    <!-- Stats Row (6 cards) -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-2 col-sm-6">
+            <div class="card stat-card text-white bg-primary-gradient">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-white-50">📚 Total Books</h6>
+                    <h2 class="mb-0" id="stat-totalBooks">0</h2>
+                    <i class="fas fa-book stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="card stat-card text-white bg-success-gradient">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-white-50">📖 Issued</h6>
+                    <h2 class="mb-0" id="stat-issued">0</h2>
+                    <i class="fas fa-book-open stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="card stat-card text-white bg-info-gradient">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-white-50">👩‍🎓 Students</h6>
+                    <h2 class="mb-0" id="stat-students">0</h2>
+                    <i class="fas fa-users stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="card stat-card text-white bg-purple-gradient">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-white-50">👨‍🏫 Teachers</h6>
+                    <h2 class="mb-0" id="stat-teachers">0</h2>
+                    <i class="fas fa-chalkboard-teacher stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="card stat-card text-white bg-warning-gradient">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-white-50">⏰ Overdue</h6>
+                    <h2 class="mb-0" id="stat-overdue">0</h2>
+                    <i class="fas fa-clock stat-icon"></i>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2 col-sm-6">
+            <div class="card stat-card text-white bg-danger-gradient">
+                <div class="card-body">
+                    <h6 class="card-subtitle text-white-50">💰 Fines Collected</h6>
+                    <h2 class="mb-0" id="stat-fines">0</h2>
+                    <i class="fas fa-rupee-sign stat-icon"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: Main content (left: loans + students, right: books + activity) -->
+    <div class="row g-4">
+        <!-- Left column: Scrollable tables -->
+        <div class="col-lg-7">
+            <!-- Currently Issued Books (scrollable) -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4">
+                <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-exchange-alt me-2 text-warning"></i> Active Book Loans</h5>
+                    <span class="badge bg-info" id="loanCount">0</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-scroll">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>Student</th><th>Book</th><th>Issue Date</th><th>Due Date</th><th>Fine (₹)</th></tr>
+                            </thead>
+                            <tbody id="loans-tbody">
+                                <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- All Students (scrollable) -->
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-header bg-white border-0 pt-3 pb-0 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-users me-2 text-success"></i> Registered Students</h5>
+                    <span class="badge bg-success" id="studentCount">0</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-scroll">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>Username</th><th>Enrollment ID</th><th>Department</th><th>Books Issued</th><th>Fine (₹)</th></tr>
+                            </thead>
+                            <tbody id="students-tbody">
+                                <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right column: Top books + Activity log -->
+        <div class="col-lg-5">
+            <!-- Top Borrowed Books (bar chart + list) -->
+            <div class="card shadow-sm border-0 rounded-4 mb-4">
+                <div class="card-header bg-white border-0 pt-3">
+                    <h5 class="mb-0"><i class="fas fa-fire me-2 text-danger"></i> Most Popular Books</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="popularChart" height="180"></canvas>
+                    <div id="popularList" class="mt-3 small" style="max-height: 180px; overflow-y: auto;">
+                        <span class="spinner-border spinner-border-sm"></span> Loading...
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity Log (scrollable) -->
+            <div class="card shadow-sm border-0 rounded-4">
+                <div class="card-header bg-white border-0 pt-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-history me-2 text-secondary"></i> Recent Activities</h5>
+                    <span class="badge bg-secondary">Last 20</span>
+                </div>
+                <div class="card-body p-2" style="max-height: 320px; overflow-y: auto;">
+                    <div id="activityLog">
+                        <div class="text-center p-3"><span class="spinner-border spinner-border-sm"></span> Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let popularChart = null;
+
+    // Helper: escape HTML
+    function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+
+    async function loadStats() {
+        try {
+            const res = await fetch('/api/admin/stats/');
+            const data = await res.json();
+            document.getElementById('stat-totalBooks').innerText = data.total_books || 0;
+            document.getElementById('stat-issued').innerText = data.total_issued || 0;
+            document.getElementById('stat-students').innerText = data.total_students || 0;
+            document.getElementById('stat-teachers').innerText = data.total_teachers || 0;
+            document.getElementById('stat-overdue').innerText = data.overdue_books || 0;
+            document.getElementById('stat-fines').innerText = data.total_fines_collected || 0;
+        } catch(e) { console.error(e); }
+    }
+
+    async function loadLoans() {
+        try {
+            const res = await fetch('/api/admin/loans/');
+            const data = await res.json();
+            const tbody = document.getElementById('loans-tbody');
+            if (data.loans && data.loans.length) {
+                document.getElementById('loanCount').innerText = data.loans.length;
+                tbody.innerHTML = data.loans.map(loan => `
+                    <tr>
+                        <td>${escapeHtml(loan.student_name)}</td>
+                        <td>${escapeHtml(loan.book_title)}</td>
+                        <td>${new Date(loan.issue_date).toLocaleDateString()}</td>
+                        <td class="${new Date(loan.due_date) < new Date() ? 'text-danger fw-bold' : ''}">${new Date(loan.due_date).toLocaleDateString()}</td>
+                        <td>₹${loan.fine}</td>
+                    </tr>
+                `).join('');
+            } else {
+                document.getElementById('loanCount').innerText = 0;
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No active loans</td></tr>';
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    async function loadStudents() {
+        try {
+            const res = await fetch('/api/admin/users/');
+            const data = await res.json();
+            const tbody = document.getElementById('students-tbody');
+            if (data.users && data.users.length) {
+                const students = data.users.filter(u => u.role === 'student');
+                document.getElementById('studentCount').innerText = students.length;
+                tbody.innerHTML = students.map(s => `
+                    <tr>
+                        <td>${escapeHtml(s.username)}</td>
+                        <td>${escapeHtml(s.enrollment_id || '-')}</td>
+                        <td>${escapeHtml(s.department || '-')}</td>
+                        <td>${s.issued_books !== undefined ? s.issued_books : '-'}</td>
+                        <td>₹${s.total_fine || 0}</td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5">No students found</td></tr>';
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    async function loadPopularBooks() {
+        try {
+            const res = await fetch('/api/admin/popular-books/');
+            const data = await res.json();
+            const books = data.popular_books || [];
+            const ctx = document.getElementById('popularChart').getContext('2d');
+            if (popularChart) popularChart.destroy();
+            if (books.length) {
+                const labels = books.map(b => b.title.length > 25 ? b.title.substring(0,22)+'...' : b.title);
+                const ratings = books.map(b => b.average_rating || 0);
+                popularChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: labels, datasets: [{ label: 'Average Rating', data: ratings, backgroundColor: '#D4AF37', borderRadius: 8 }] },
+                    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top' } } }
+                });
+                const listDiv = document.getElementById('popularList');
+                listDiv.innerHTML = books.map(b => `<div class="mb-1"><i class="fas fa-star text-warning"></i> <strong>${escapeHtml(b.title)}</strong> — ⭐ ${b.average_rating ? b.average_rating.toFixed(1) : '0'} (${b.total_ratings || 0} ratings)</div>`).join('');
+            } else {
+                document.getElementById('popularList').innerHTML = '<p class="text-muted">No ratings yet</p>';
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    async function loadActivityLog() {
+        try {
+            const res = await fetch('/api/admin/activity-logs/');
+            const data = await res.json();
+            const container = document.getElementById('activityLog');
+            if (data.logs && data.logs.length) {
+                container.innerHTML = data.logs.slice(0, 20).map(log => `
+                    <div class="activity-item">
+                        <strong>${escapeHtml(log.user)}</strong> ${escapeHtml(log.action)}<br>
+                        <small class="text-muted"><i class="far fa-clock"></i> ${new Date(log.time).toLocaleString()}</small>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = '<p class="text-muted text-center">No recent activity</p>';
+            }
+        } catch(e) { console.error(e); }
+    }
+
+    function logout() { fetch('/api/logout/').then(() => window.location.href = '/api/admin/login/page/'); }
+
+    // Initial load
+    loadStats();
+    loadLoans();
+    loadStudents();
+    loadPopularBooks();
+    loadActivityLog();
+    setInterval(() => { loadStats(); loadLoans(); loadActivityLog(); }, 60000);
+</script>
+{% endblock %}
